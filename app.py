@@ -5,7 +5,7 @@ import subprocess
 import requests
 import time
 import os
-import streamlit as st
+#import streamlit as st
 from langchain.chains import LLMChain, RetrievalQA
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
@@ -29,8 +29,11 @@ from deepgram import (
 load_dotenv()
 
 # Set API keys using Streamlit secrets or dotenv
-GROQ_API_KEY = st.secrets["api_keys"]["GROQ_API_KEY"] if "api_keys" in st.secrets else os.getenv("GROQ_API_KEY")
-DG_API_KEY = st.secrets["api_keys"]["DeepGram_API_key"] if "api_keys" in st.secrets else os.getenv("DeepGram_API_key")
+#GROQ_API_KEY = st.secrets["api_keys"]["GROQ_API_KEY"] if "api_keys" in st.secrets else os.getenv("GROQ_API_KEY")
+#DG_API_KEY = st.secrets["api_keys"]["DeepGram_API_key"] if "api_keys" in st.secrets else os.getenv("DeepGram_API_key")
+
+GROQ_API_KEY = os.getenv("My_Groq_API_key")
+DG_API_KEY = os.getenv("DeepGram_API_key")
 
 class LanguageModelProcessor:
     def __init__(self):
@@ -72,7 +75,7 @@ class LanguageModelProcessor:
         self.memory.chat_memory.add_ai_message(response['text'])  # Add AI response to memory
 
         elapsed_time = int((end_time - start_time) * 1000)
-        st.write(f"LLM ({elapsed_time}ms): {response['text']}")
+        print(f"LLM ({elapsed_time}ms): {response['text']}")
         return response['text']
 
 class TextToSpeech:
@@ -87,8 +90,7 @@ class TextToSpeech:
 
     def speak(self, text):
         if not self.is_installed("ffplay"):
-            st.error("ffplay not found, necessary to stream audio.")
-            return
+            raise ValueError("ffplay not found, necessary to stream audio.")
 
         DEEPGRAM_URL = f"https://api.deepgram.com/v1/speak?model={self.MODEL_NAME}&performance=some&encoding=linear16&sample_rate=24000"
         headers = {
@@ -116,7 +118,7 @@ class TextToSpeech:
                     if first_byte_time is None:  # Check if this is the first chunk received
                         first_byte_time = time.time()  # Record the time when the first byte is received
                         ttfb = int((first_byte_time - start_time) * 1000)  # Calculate the time to first byte
-                        st.write(f"TTS Time to First Byte (TTFB): {ttfb}ms")
+                        print(f"TTS Time to First Byte (TTFB): {ttfb}ms\n")
                     player_process.stdin.write(chunk)
                     player_process.stdin.flush()
 
@@ -147,7 +149,7 @@ async def get_transcript(callback):
         deepgram: DeepgramClient = DeepgramClient(DG_API_KEY, config)
 
         dg_connection = deepgram.listen.asyncwebsocket.v("1")
-        st.write("Listening...")
+        print ("Listening...")
 
         async def on_message(self, result, **kwargs):
             sentence = result.channel.alternatives[0].transcript
@@ -159,7 +161,7 @@ async def get_transcript(callback):
                 full_sentence = transcript_collector.get_full_transcript()
                 if len(full_sentence.strip()) > 0:
                     full_sentence = full_sentence.strip()
-                    st.write(f"Human: {full_sentence}")
+                    print(f"Human: {full_sentence}")
                     callback(full_sentence)
                     transcript_collector.reset()
                     transcription_complete.set()
@@ -186,9 +188,9 @@ async def get_transcript(callback):
 
         microphone.finish()
         await dg_connection.finish()
-
+    
     except Exception as e:
-        st.error(f"Could not open socket: {e}")
+        print(f"Could not open socket: {e}")
         return
 
 class ConversationManager:
@@ -212,13 +214,8 @@ class ConversationManager:
             tts.speak(llm_response)
 
             self.transcription_response = ""
-
-def run_app():
-    st.title("Ella: Your AI Voice Assistant")
-    st.write("Speak into your microphone to ask Ella about any product-related queries.")
-
+    
+if __name__ == "__main__":
     manager = ConversationManager()
     asyncio.run(manager.main())
-
-if __name__ == "__main__":
-    run_app()
+    
