@@ -96,6 +96,7 @@ websockets = "^13.0"
 yarl = "^1.9.4"
 zope-event = "^5.0"
 zope-interface = "^7.0.1"
+streamlit = "^1.37.1"
 
 [build-system]
 requires = ["poetry-core"]
