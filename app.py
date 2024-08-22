@@ -5,6 +5,9 @@ import subprocess
 import requests
 import time
 import os
+import pyaudio
+import sounddevice as sd
+import numpy as np
 #import streamlit as st
 from langchain.chains import LLMChain, RetrievalQA
 from langchain_core.prompts import ChatPromptTemplate
@@ -24,7 +27,11 @@ from deepgram import (
     LiveTranscriptionEvents,
     LiveOptions,
     Microphone,
+    SpeakOptions,
 )
+
+import wave
+
 
 load_dotenv()
 
