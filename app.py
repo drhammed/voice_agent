@@ -78,7 +78,7 @@ class LanguageModelProcessor:
 class TextToSpeech:
     def __init__(self):
         self.DG_API_KEY = DG_API_KEY
-        self.MODEL_NAME = "aura-helios-en"  # Example model name, change as needed
+        self.MODEL_NAME = "aura-helios-en"  
 
     @staticmethod
     def is_installed(lib_name: str) -> bool:
