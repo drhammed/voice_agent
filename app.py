@@ -36,8 +36,8 @@ import wave
 load_dotenv()
 
 # Set API keys using Streamlit secrets or dotenv
-#GROQ_API_KEY = st.secrets["api_keys"]["GROQ_API_KEY"] if "api_keys" in st.secrets else os.getenv("GROQ_API_KEY")
-#DG_API_KEY = st.secrets["api_keys"]["DeepGram_API_key"] if "api_keys" in st.secrets else os.getenv("DeepGram_API_key")
+#GROQ_API_KEY = st.secrets["api_keys"]["GROQ_API_KEY"] 
+#DG_API_KEY = st.secrets["api_keys"]["DeepGram_API_key"]
 
 GROQ_API_KEY = os.getenv("My_Groq_API_key")
 DG_API_KEY = os.getenv("DeepGram_API_key")
@@ -71,15 +71,18 @@ class LanguageModelProcessor:
         )
 
     def process(self, text):
-        self.memory.chat_memory.add_user_message(text)  # Add user message to memory
+        # Let's add user message to memory
+        self.memory.chat_memory.add_user_message(text)  
 
         start_time = time.time()
 
         # Go get the response from the LLM
         response = self.conversation.invoke({"text": text})
         end_time = time.time()
-
-        self.memory.chat_memory.add_ai_message(response['text'])  # Add AI response to memory
+        
+        
+        # Also, we can Add AI response to memory
+        self.memory.chat_memory.add_ai_message(response['text'])  
 
         elapsed_time = int((end_time - start_time) * 1000)
         print(f"LLM ({elapsed_time}ms): {response['text']}")
@@ -98,8 +101,8 @@ class TextToSpeech:
     def speak(self, text):
         if not self.is_installed("ffplay"):
             raise ValueError("ffplay not found, necessary to stream audio.")
-
-        DEEPGRAM_URL = f"https://api.deepgram.com/v1/speak?model={self.MODEL_NAME}&performance=some&encoding=linear16&sample_rate=24000"
+        
+        DEEPGRAM_URL = f"https://api.deepgram.com/v1/speak?model {self.MODEL_NAME}&encoding=linear16&sample_rate=24000"
         headers = {
             "Authorization": f"Token {self.DG_API_KEY}",
             "Content-Type": "application/json"
@@ -115,16 +118,22 @@ class TextToSpeech:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-
-        start_time = time.time()  # Record the time before sending the request
-        first_byte_time = None  # Initialize a variable to store the time when the first byte is received
+        
+        
+        # To keep track- record the time before sending the request
+        start_time = time.time()
+        # Also, initialize a variable to store the time when the first byte is received  
+        first_byte_time = None  
 
         with requests.post(DEEPGRAM_URL, stream=True, headers=headers, json=payload) as r:
             for chunk in r.iter_content(chunk_size=1024):
                 if chunk:
-                    if first_byte_time is None:  # Check if this is the first chunk received
-                        first_byte_time = time.time()  # Record the time when the first byte is received
-                        ttfb = int((first_byte_time - start_time) * 1000)  # Calculate the time to first byte
+                    # Check if this is the first chunk received
+                    if first_byte_time is None: 
+                        # Record the time when the first byte is received
+                        first_byte_time = time.time()  
+                        # Calculate the time to first byte
+                        ttfb = int((first_byte_time - start_time) * 1000)  
                         print(f"TTS Time to First Byte (TTFB): {ttfb}ms\n")
                     player_process.stdin.write(chunk)
                     player_process.stdin.flush()
@@ -149,7 +158,8 @@ class TranscriptCollector:
 transcript_collector = TranscriptCollector()
 
 async def get_transcript(callback):
-    transcription_complete = asyncio.Event()  # Event to signal transcription completion
+    # Event to signal transcription completion
+    transcription_complete = asyncio.Event()  
 
     try:
         config = DeepgramClientOptions(options={"keepalive": "true"})
