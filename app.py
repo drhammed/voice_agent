@@ -20,6 +20,10 @@ from langchain.prompts import (
     HumanMessagePromptTemplate,
 )
 from langchain.chains import LLMChain
+from langchain_community.cache import RedisCache
+from langchain.globals import set_llm_cache
+import redis
+
 
 from deepgram import (
     DeepgramClient,
@@ -42,9 +46,24 @@ load_dotenv()
 GROQ_API_KEY = os.getenv("My_Groq_API_key")
 DG_API_KEY = os.getenv("DeepGram_API_key")
 
+if not GROQ_API_KEY:
+    raise EnvironmentError("Groq API key is missing, please add the API...")
+
+if not DG_API_KEY:
+    raise EnvironmentError("Deepgram API key is missing, , please add the API")
+
+
 class LanguageModelProcessor:
     def __init__(self):
         self.llm = ChatGroq(temperature=0.02, model_name="llama3-8b-8192", groq_api_key=GROQ_API_KEY)
+        
+        # Set up a Redis client- this was set up in Docker
+        self.redis_client = redis.Redis.from_url(url="redis://default:admin@localhost:6379/0")
+        #redis_client = redis.Redis(host="localhost", port=6379, username="default", password="admin", db=0)
+        # Initialize the Redis cache with the Redis client
+        set_llm_cache(RedisCache(self.redis_client))
+        
+        #Use the conversation buffer memory
 
         self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
@@ -70,23 +89,27 @@ class LanguageModelProcessor:
             memory=self.memory
         )
 
+    
     def process(self, text):
         # Let's add user message to memory
         self.memory.chat_memory.add_user_message(text)  
-
         start_time = time.time()
-
+        # if the response is already in the cache
+        cached_response = self.redis_client.get(text)
+        if cached_response is not None:
+            print("Using cached response")
+            return cached_response.decode('utf-8')
         # Go get the response from the LLM
         response = self.conversation.invoke({"text": text})
         end_time = time.time()
-        
-        
-        # Also, we can Add AI response to memory
+        # Add AI response to memory
         self.memory.chat_memory.add_ai_message(response['text'])  
-
+        # Cache the response
+        self.redis_client.set(text, response['text'].encode('utf-8'))
         elapsed_time = int((end_time - start_time) * 1000)
         print(f"LLM ({elapsed_time}ms): {response['text']}")
         return response['text']
+    
 
 class TextToSpeech:
     def __init__(self):
