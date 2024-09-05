@@ -8,7 +8,6 @@ import os
 import pyaudio
 import sounddevice as sd
 import numpy as np
-#import streamlit as st
 from langchain.chains import LLMChain, RetrievalQA
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_groq import ChatGroq
@@ -24,7 +23,6 @@ from langchain_community.cache import RedisCache
 from langchain.globals import set_llm_cache
 import redis
 
-
 from deepgram import (
     DeepgramClient,
     DeepgramClientOptions,
@@ -35,13 +33,13 @@ from deepgram import (
 )
 
 import wave
+import json
+import hashlib
+from datetime import datetime
 
 
 load_dotenv()
 
-# Set API keys using Streamlit secrets or dotenv
-#GROQ_API_KEY = st.secrets["api_keys"]["GROQ_API_KEY"] 
-#DG_API_KEY = st.secrets["api_keys"]["DeepGram_API_key"]
 
 GROQ_API_KEY = os.getenv("My_Groq_API_key")
 DG_API_KEY = os.getenv("DeepGram_API_key")
@@ -53,18 +51,23 @@ if not DG_API_KEY:
     raise EnvironmentError("Deepgram API key is missing, , please add the API")
 
 
+
 class LanguageModelProcessor:
     def __init__(self):
-        self.llm = ChatGroq(temperature=0.02, model_name="llama3-8b-8192", groq_api_key=GROQ_API_KEY)
+        self.llm = ChatGroq(temperature=0.02, model_name="gemma-7b-it", groq_api_key=GROQ_API_KEY)
         
         # Set up a Redis client- this was set up in Docker
         self.redis_client = redis.Redis.from_url(url="redis://default:admin@localhost:6379/0")
-        #redis_client = redis.Redis(host="localhost", port=6379, username="default", password="admin", db=0)
         # Initialize the Redis cache with the Redis client
         set_llm_cache(RedisCache(self.redis_client))
         
+       # Initialize JSON cache
+        self.json_cache_file = 'backup_cache.json'
+        if not os.path.exists(self.json_cache_file):
+            with open(self.json_cache_file, 'w') as f:
+                json.dump({}, f)
+               
         #Use the conversation buffer memory
-
         self.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
         system_prompt = """
@@ -89,27 +92,60 @@ class LanguageModelProcessor:
             memory=self.memory
         )
 
+    def generate_id(self, text):
+        return hashlib.sha256(text.encode()).hexdigest()
     
     def process(self, text):
-        # Let's add user message to memory
-        self.memory.chat_memory.add_user_message(text)  
+        print(f"\nProcessing query: {text}")
+        # Add user message to memory
+        self.memory.chat_memory.add_user_message(text)
+        # Get start time
         start_time = time.time()
-        # if the response is already in the cache
-        cached_response = self.redis_client.get(text)
+        # Generate a unique ID for the query
+        query_id = self.generate_id(text)
+        
+        # Check Redis cache
+        cached_response = self.redis_client.get(query_id)
         if cached_response is not None:
-            print("Using cached response")
+            print("Using Redis cached response")
             return cached_response.decode('utf-8')
-        # Go get the response from the LLM
+        
+        # Check JSON cache
+        with open(self.json_cache_file, 'r') as f:
+            json_cache = json.load(f)
+        if query_id in json_cache:
+            print("Using JSON cached response")
+            return json_cache[query_id]['response']
+        
+        # If not in either cache, use LLM
+        print("No cache hit. Querying LLM...")
         response = self.conversation.invoke({"text": text})
         end_time = time.time()
+        
         # Add AI response to memory
         self.memory.chat_memory.add_ai_message(response['text'])  
-        # Cache the response
-        self.redis_client.set(text, response['text'].encode('utf-8'))
+        
+        # Cache the response in Redis
+        self.redis_client.set(query_id, response['text'].encode('utf-8'))
+        print("Cached response in Redis")
+        
+        # Cache the response in JSON
+        with open(self.json_cache_file, 'r+') as f:
+            json_cache = json.load(f)
+            json_cache[query_id] = {
+                'response': response['text'],
+                'timestamp': datetime.now().isoformat()
+            }
+            f.seek(0)
+            json.dump(json_cache, f, indent=2)
+            f.truncate()
+        print("Cached response in JSON")
+        
         elapsed_time = int((end_time - start_time) * 1000)
-        print(f"LLM ({elapsed_time}ms): {response['text']}")
-        return response['text']
-    
+        print(f"LLM response time: {elapsed_time}ms")
+        print(f"LLM response: {response['text']}")
+        return response['text']       
+        
 
 class TextToSpeech:
     def __init__(self):
